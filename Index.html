@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>소모품 재고관리 · 삼영순화 지원팀</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  /* ▼▼▼ 여기 두 줄만 본인 Supabase 프로젝트 값으로 바꾸세요 ▼▼▼
+     (Supabase 대시보드 → Project Settings → API 에서 확인)
+     - SUPABASE_URL   : Project URL
+     - SUPABASE_ANON  : anon public key  (공개돼도 안전한 키. 보안은 RLS로 처리)          */
+  const SUPABASE_URL  = "https://rpogtvzauxioqfykmbtb.supabase.co/rest/v1/";
+  const SUPABASE_ANON = "sb_publishable_Na8XR4Fv434FbIUCngMfww_kdWl27Er";
+  /* ▲▲▲ 여기까지 ▲▲▲ */
+</script>
+<style>
+  :root{
+    --ink:#122031; --ink-soft:#3a4c60; --muted:#7688a0;
+    --bg:#eef2f7; --surface:#ffffff; --line:#dbe3ee; --line-soft:#eaeff6;
+    --wh1:#2563eb; --wh2:#0d9488; --wh3:#b45309;
+    --ok:#15a34a; --ok-bg:#e7f6ec;
+    --warn:#d97706; --warn-bg:#fdf1e0;
+    --low:#dc2626; --low-bg:#fdeaea;
+    --shadow:0 1px 2px rgba(18,32,49,.06),0 8px 24px rgba(18,32,49,.06);
+    box-sizing:border-box;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#e8eef6; --ink-soft:#aebccd; --muted:#8497ad;
+      --bg:#0e1621; --surface:#16212f; --line:#28374a; --line-soft:#1e2b3a;
+      --ok-bg:#123122; --warn-bg:#33260f; --low-bg:#341717;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  body{
+    margin:0; font-family:"Noto Sans KR",system-ui,sans-serif;
+    background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; font-size:15px; line-height:1.5;
+  }
+  button{font-family:inherit}
+  .hidden{display:none !important}
+
+  /* ---------- LOGIN ---------- */
+  #login{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{
+    width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);
+    border-radius:18px;box-shadow:var(--shadow);padding:34px 28px;
+  }
+  .brand{display:flex;align-items:center;gap:11px;margin-bottom:26px}
+  .brand-mark{width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,var(--wh1),var(--wh2));
+    display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:19px}
+  .brand-name{font-weight:900;font-size:17px;letter-spacing:-.3px;line-height:1.2}
+  .brand-sub{font-size:12px;color:var(--muted);font-weight:500}
+  label.fld{display:block;font-size:12.5px;font-weight:700;color:var(--ink-soft);margin:14px 0 6px}
+  input[type=text],input[type=password],input[type=number],select{
+    width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:11px;
+    background:var(--surface);color:var(--ink);font-size:15px;outline:none;transition:border-color .15s;
+  }
+  input:focus,select:focus{border-color:var(--wh1)}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    padding:11px 16px;border-radius:11px;border:1px solid transparent;
+    font-weight:700;font-size:14.5px;cursor:pointer;transition:transform .05s,filter .15s;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn-primary{background:var(--ink);color:#fff}
+  .btn-primary:hover{filter:brightness(1.12)}
+  .btn-block{width:100%}
+  .btn-ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+  .btn-ghost:hover{background:var(--line-soft)}
+  .btn-danger{background:var(--low-bg);color:var(--low);border-color:transparent}
+  .btn-sm{padding:7px 11px;font-size:13px;border-radius:9px}
+  .hint{font-size:12px;color:var(--muted);margin-top:16px;text-align:center;line-height:1.6}
+  .err{color:var(--low);font-size:13px;font-weight:600;margin-top:12px;min-height:18px}
+
+  /* ---------- APP SHELL ---------- */
+  #app{max-width:1120px;margin:0 auto;padding:0 16px 96px}
+  header.topbar{
+    position:sticky;top:env(safe-area-inset-top,0px);z-index:40;
+    background:var(--bg);padding:14px 0 10px;display:flex;align-items:center;gap:12px;
+    border-bottom:1px solid var(--line-soft);margin-bottom:18px;flex-wrap:wrap;
+  }
+  .topbar .brand-mark{width:34px;height:34px;font-size:15px;border-radius:9px}
+  .topbar .brand-name{font-size:15px}
+  .who{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px}
+  .who b{color:var(--ink)}
+  .role-chip{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px}
+  .role-admin{background:var(--wh1);color:#fff}
+  .role-user{background:var(--line);color:var(--ink-soft)}
+
+  nav.tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:20px;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+  nav.tabs button{
+    flex:0 0 auto;padding:9px 14px;border-radius:999px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink-soft);font-weight:700;font-size:13.5px;cursor:pointer;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;
+  }
+  nav.tabs button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .tab-badge{background:var(--low);color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px}
+
+  /* ---------- CARDS / GRID ---------- */
+  .grid{display:grid;gap:16px}
+  .stat-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 16px;box-shadow:var(--shadow)}
+  .stat .n{font-size:26px;font-weight:900;letter-spacing:-.5px}
+  .stat .l{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:2px}
+  .stat.alert .n{color:var(--low)}
+
+  .section-title{font-size:13px;font-weight:800;color:var(--muted);margin:26px 0 12px;letter-spacing:.2px}
+
+  /* alert strip */
+  .alert-strip{
+    background:var(--low-bg);border:1px solid #f4c7c7;border-radius:14px;padding:14px 16px;margin-bottom:6px;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme=light]) .alert-strip{border-color:#5a2222}}
+  .alert-strip.none{background:var(--ok-bg);border-color:transparent}
+  .alert-head{display:flex;align-items:center;gap:8px;font-weight:800;font-size:14px;color:var(--low)}
+  .alert-strip.none .alert-head{color:var(--ok)}
+  .alert-list{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+  .alert-item{display:flex;align-items:center;gap:8px;font-size:13.5px;background:var(--surface);
+    border-radius:10px;padding:8px 11px;flex-wrap:wrap}
+  .alert-item .nm{font-weight:700}
+  .alert-item .q{margin-left:auto;font-weight:700;color:var(--low)}
+
+  /* warehouse zones (도식화) */
+  .zones{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .zone{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+  .zone-head{padding:14px 16px;color:#fff;display:flex;align-items:center;gap:10px}
+  .zone-head .z-ico{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,.22);
+    display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+  .zone-head .z-nm{font-weight:800;font-size:15px}
+  .zone-head .z-sub{font-size:11.5px;opacity:.85;font-weight:500}
+  .zone-head .z-cnt{margin-left:auto;font-size:12px;font-weight:700;background:rgba(255,255,255,.2);padding:3px 9px;border-radius:999px}
+  .zone-body{padding:8px 8px 12px}
+  .cat-label{font-size:11px;font-weight:800;color:var(--muted);padding:8px 10px 4px}
+  .item-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:11px}
+  .item-row:hover{background:var(--line-soft)}
+  .item-main{min-width:0;flex:1}
+  .item-nm{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item-meta{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .gauge{height:6px;border-radius:999px;background:var(--line);margin-top:6px;overflow:hidden}
+  .gauge > i{display:block;height:100%;border-radius:999px}
+  .stock-badge{flex:0 0 auto;text-align:right;min-width:66px}
+  .stock-badge .sn{font-weight:900;font-size:16px}
+  .stock-badge .su{font-size:11px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-low{background:var(--low)}
+
+  /* generic list card */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:18px}
+  .row-list{display:flex;flex-direction:column}
+  .lrow{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+  .lrow:last-child{border-bottom:none}
+  .pill{font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px}
+  .txn-in{background:var(--ok-bg);color:var(--ok)}
+  .txn-out{background:var(--warn-bg);color:var(--warn)}
+  .grow{flex:1;min-width:0}
+  .tsmall{font-size:12px;color:var(--muted)}
+  .selrow{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  .selrow > div{flex:1;min-width:140px}
+  .form-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+
+  /* QR grid */
+  .qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px}
+  .qr-cell{border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center;background:var(--surface)}
+  .qr-cell .qbox{background:#fff;border-radius:8px;padding:8px;display:inline-block;margin-bottom:8px}
+  .qr-cell .qnm{font-weight:700;font-size:13px}
+  .qr-cell .qsub{font-size:11px;color:var(--muted)}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(10,18,28,.55);z-index:80;display:flex;align-items:center;
+    justify-content:center;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+  .modal{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);width:100%;max-width:440px;
+    max-height:88vh;overflow:auto;padding:22px}
+  .modal h3{margin:0 0 4px;font-size:18px}
+  .modal .sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+  #reader{width:100%;border-radius:12px;overflow:hidden;margin-bottom:12px}
+  #reader video{border-radius:12px}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+    background:var(--ink);color:#fff;padding:11px 18px;border-radius:12px;font-weight:600;font-size:14px;
+    z-index:120;box-shadow:var(--shadow);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  #toast.ok{background:var(--ok)} #toast.warn{background:var(--warn)} #toast.bad{background:var(--low)}
+
+  .empty{text-align:center;color:var(--muted);padding:34px 16px;font-size:14px}
+  .fab{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:50;
+    background:var(--wh2);color:#fff;border:none;border-radius:999px;padding:15px 22px;font-weight:800;font-size:15px;
+    box-shadow:0 8px 24px rgba(13,148,136,.4);cursor:pointer;display:flex;align-items:center;gap:8px}
+
+  @media print{
+    body{background:#fff}
+    .topbar,nav.tabs,.no-print,.fab{display:none !important}
+    #app{padding:0}
+    .qr-cell{break-inside:avoid;border-color:#ccc}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-mark">소</div>
+      <div>
+        <div class="brand-name">소모품 재고관리</div>
+        <div class="brand-sub">삼영순화 지원팀 · 사내 소모품 창고</div>
+      </div>
+    </div>
+    <label class="fld">관리자 이메일</label>
+    <input type="text" id="lg-id" autocomplete="username" placeholder="admin@company.com">
+    <label class="fld">비밀번호</label>
+    <input type="password" id="lg-pw" autocomplete="current-password" placeholder="비밀번호">
+    <div class="err" id="lg-err"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:6px" onclick="doLogin()">관리자 로그인</button>
+    <button class="btn btn-ghost btn-block" style="margin-top:10px" onclick="enterGuest()">🙋 로그인 없이 반출하기</button>
+    <div class="hint">관리자 계정은 Supabase 대시보드에서 등록합니다 — 입고·품목·QR·발주 관리용.<br>현장 반출은 로그인 없이 QR만으로 가능합니다.</div>
+  </div>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <div class="brand-mark">소</div>
+    <div>
+      <div class="brand-name">소모품 재고관리</div>
+      <div class="brand-sub" style="font-size:11px;color:var(--muted)">삼영순화 지원팀</div>
+    </div>
+    <div class="who">
+      <span><b id="who-name"></b></span>
+      <span class="role-chip" id="who-role"></span>
+      <button class="btn btn-ghost btn-sm" onclick="doLogout()">로그아웃</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs"></nav>
+  <main id="view"></main>
+</div>
+
+<button class="fab hidden" id="fab" onclick="openScan()">📷 QR 반출</button>
+
+<div id="overlay-root"></div>
+<div id="toast"></div>
+
+<script>
+/* =========================================================
+   Supabase 데이터 계층
+   ========================================================= */
+let sb=null;
+let S={warehouses:[],items:[],staff:[],txns:[]};
+let currentTab="dashboard", qrScanner=null;
+let AUTHED=false, GUEST=false;
+
+function initSB(){
+  if(sb) return true;
+  if(typeof supabase==="undefined" || !SUPABASE_URL || SUPABASE_URL.indexOf("YOUR-PROJECT")>=0){
+    return false;
+  }
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON);
+  return true;
+}
+
+/* Supabase에서 캐시(S)로 로드 — 기존 렌더 코드가 쓰는 형태로 매핑 */
+async function refresh(){
+  if(!sb) return;
+  const [wh,itm,st,tx]=await Promise.all([
+    sb.from("warehouses").select("*").order("sort"),
+    sb.from("items").select("*").order("created_at"),
+    sb.from("staff").select("*").order("name"),
+    sb.from("txns").select("*").order("created_at",{ascending:false}).limit(300)
+  ]);
+  S.warehouses=(wh.data||[]).map(w=>({id:w.id,name:w.name,sub:w.sub,color:w.color}));
+  S.items=(itm.data||[]).map(x=>({id:x.id,name:x.name,wh:x.warehouse_id,cat:x.category,unit:x.unit,stock:x.stock,rp:x.reorder_point}));
+  S.staff=(st.data||[]).map(r=>r.name);
+  S.txns=(tx.data||[]).map(t=>({id:t.id,type:t.type,item:t.item_id,itemName:t.item_name,wh:t.warehouse_id,qty:t.qty,byName:t.actor,at:t.created_at}));
+  if(AUTHED){
+    const set=await sb.from("app_settings").select("*");
+    const m={}; (set.data||[]).forEach(r=>m[r.key]=r.value);
+    S.alertEmails=m.alert_emails||"";
+  }
+}
+async function reload(){ await refresh(); buildTabs(); render(); }
+
+/* 발주 알림 메일 (Supabase Edge Function 호출) */
+async function saveAlertEmails(){
+  const val=(document.getElementById("ae-input").value||"").trim();
+  const {error}=await sb.from("app_settings").upsert({key:"alert_emails",value:val});
+  if(error){toast("저장 실패: "+(error.message||""),"bad");return}
+  S.alertEmails=val; toast("수신자를 저장했습니다","ok");
+}
+async function sendReorderMail(test){
+  toast(test?"테스트 메일 발송 중…":"발주 메일 발송 중…");
+  const {data,error}=await sb.functions.invoke("notify-reorder",{body:{test:!!test}});
+  if(error){toast("발송 실패: 함수 배포/설정을 확인하세요","bad");return}
+  if(data&&data.ok===false){toast("발송 실패: "+(data.error||""),"bad");return}
+  if(data&&data.sent===false){toast(data.message||"발주 필요 품목이 없습니다","warn");return}
+  toast(`관리자에게 메일을 보냈습니다${data&&data.count?" ("+data.count+"건)":""}`,"ok");
+}
+
+/* appUrl은 브라우저 로컬에만 저장(관리자 편의) */
+function loadAppUrl(){try{S.appUrl=localStorage.getItem("sypcon_appurl")||"";}catch(e){}}
+
+/* =========================================================
+   인증 (Supabase Auth)
+   ========================================================= */
+async function doLogin(){
+  if(!initSB()){document.getElementById("lg-err").textContent="Supabase 설정(SUPABASE_URL/ANON)이 필요합니다.";return}
+  const email=v("lg-id").trim(), pw=v("lg-pw");
+  const {error}=await sb.auth.signInWithPassword({email,password:pw});
+  if(error){document.getElementById("lg-err").textContent="로그인 실패: 이메일 또는 비밀번호를 확인하세요.";return}
+  AUTHED=true; GUEST=false; await refresh(); enterApp();
+}
+async function doLogout(){stopScan();
+  try{if(sb)await sb.auth.signOut()}catch(e){}
+  AUTHED=false; GUEST=false;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("login").classList.remove("hidden");document.getElementById("fab").classList.add("hidden");
+  document.getElementById("lg-pw").value="";}
+async function enterGuest(){
+  if(!initSB()){document.getElementById("lg-err").textContent="Supabase 설정(SUPABASE_URL/ANON)이 필요합니다.";return}
+  GUEST=true; AUTHED=false; await refresh(); enterApp();
+}
+function me(){ if(AUTHED) return {id:"admin",name:"관리자",role:"admin"}; return {id:"guest",name:"(현장)",role:"guest"}; }
+function isAdmin(){return AUTHED}
+
+function enterApp(){
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  const guest=!AUTHED;
+  document.getElementById("who-name").textContent = guest ? "현장 반출 모드" : "관리자";
+  const rc=document.getElementById("who-role");
+  rc.textContent = guest ? "반출" : "관리자";
+  rc.className="role-chip "+(guest?"role-user":"role-admin");
+  const wb=document.querySelector(".who button"); if(wb) wb.textContent = guest ? "로그인" : "로그아웃";
+  document.getElementById("fab").classList.remove("hidden");
+  const start = isAdmin() ? "dashboard" : "outbound";
+  buildTabs(); go(start);
+}
+
+/* =========================================================
+   재고 상태 계산
+   ========================================================= */
+function statusOf(x){ if(x.stock<=x.rp) return "low"; if(x.stock<=x.rp*1.5) return "warn"; return "ok"; }
+function lowItems(){return S.items.filter(x=>x.stock<=x.rp)}
+function whOf(id){return S.warehouses.find(w=>w.id===id)}
+function itemById(id){return S.items.find(x=>x.id===id)}
+function fmtTime(t){const d=new Date(t);const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}.${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`}
+
+/* =========================================================
+   탭
+   ========================================================= */
+function buildTabs(){
+  const admin=isAdmin();
+  const guest=me()&&me().role==="guest";
+  const tabs=(guest?[
+    {k:"outbound",t:"📤 반출"}
+  ]:[
+    {k:"dashboard",t:"📊 창고 현황"},
+    {k:"outbound",t:"📤 반출"},
+    admin&&{k:"inbound",t:"📥 입고"},
+    {k:"history",t:"🕑 이력"},
+    admin&&{k:"items",t:"📦 품목관리"},
+    admin&&{k:"qr",t:"🏷 QR 발행"},
+    admin&&{k:"users",t:"👥 계정·명단"}
+  ]).filter(Boolean);
+  const el=document.getElementById("tabs"); el.innerHTML="";
+  tabs.forEach(tb=>{
+    const b=document.createElement("button");
+    b.className="tab"+(tb.k===currentTab?" active":"");
+    b.innerHTML=tb.t;
+    if(tb.k==="dashboard"){const n=lowItems().length;if(n)b.innerHTML+=` <span class="tab-badge">${n}</span>`}
+    b.onclick=()=>go(tb.k);
+    el.appendChild(b);
+  });
+}
+function go(k){currentTab=k;buildTabs();stopScan();render();window.scrollTo(0,0)}
+
+/* =========================================================
+   렌더
+   ========================================================= */
+function render(){
+  const el=document.getElementById("view");
+  el.innerHTML=({
+    dashboard:viewDashboard, outbound:viewOutbound, inbound:viewInbound,
+    history:viewHistory, items:viewItems, qr:viewQR, users:viewUsers
+  }[currentTab]||viewDashboard)();
+  if(currentTab==="qr") setTimeout(renderQRCodes,30);
+  if(currentTab==="outbound") renderOutboundList();
+  if(currentTab==="items") renderItemsList();
+}
+
+/* ---- 대시보드 (도식화) ---- */
+function viewDashboard(){
+  const total=S.items.length, low=lowItems().length;
+  const totalStock=S.items.reduce((a,b)=>a+b.stock,0);
+  const todayOut=S.txns.filter(t=>t.type==="out"&&sameDay(t.at)).length;
+
+  let alert;
+  if(low===0){
+    alert=`<div class="alert-strip none"><div class="alert-head">✅ 발주 필요 품목이 없습니다. 재고가 모두 적정 수준입니다.</div></div>`;
+  }else{
+    const rows=lowItems().map(x=>{
+      const w=whOf(x.wh); const need=Math.max(1,x.rp*2-x.stock);
+      return `<div class="alert-item"><span class="dot d-low"></span>
+        <span class="nm">${esc(x.name)}</span>
+        <span class="tsmall">${w.name}·현재 ${x.stock}${x.unit} / 적정 ${x.rp}${x.unit}</span>
+        <span class="q">발주권장 ${need}${x.unit}</span></div>`;
+    }).join("");
+    alert=`<div class="alert-strip"><div class="alert-head">🔔 발주 알림 · 적정재고 이하 ${low}개 품목</div>
+      <div class="alert-list">${rows}</div>
+      ${isAdmin()?`<div style="margin-top:12px"><button class="btn btn-danger btn-sm" onclick="makeOrder()">📋 발주서 만들기</button></div>`:""}
+      </div>`;
+  }
+
+  const zones=S.warehouses.map(w=>{
+    const items=S.items.filter(x=>x.wh===w.id);
+    const cats=[...new Set(items.map(x=>x.cat))];
+    let body="";
+    if(!items.length){ body=`<div class="empty">품목이 없습니다.</div>`; }
+    else cats.forEach(c=>{
+      body+=`<div class="cat-label">${esc(c)}</div>`;
+      items.filter(x=>x.cat===c).forEach(x=>{
+        const st=statusOf(x); const pct=Math.min(100,Math.round(x.stock/Math.max(1,x.rp*2)*100));
+        const col=st==="low"?"var(--low)":st==="warn"?"var(--warn)":"var(--ok)";
+        body+=`<div class="item-row">
+          <span class="dot d-${st}"></span>
+          <div class="item-main">
+            <div class="item-nm">${esc(x.name)}</div>
+            <div class="item-meta">적정 ${x.rp}${x.unit}</div>
+            <div class="gauge"><i style="width:${pct}%;background:${col}"></i></div>
+          </div>
+          <div class="stock-badge"><div class="sn" style="color:${col}">${x.stock}</div><div class="su">${esc(x.unit)}</div></div>
+        </div>`;
+      });
+    });
+    return `<div class="zone">
+      <div class="zone-head" style="background:${w.color}">
+        <div class="z-ico">${w.name.replace("창고","")}</div>
+        <div><div class="z-nm">${esc(w.name)}</div><div class="z-sub">${esc(w.sub)}</div></div>
+        <div class="z-cnt">${items.length}품목</div>
+      </div>
+      <div class="zone-body">${body}</div>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="grid stat-row">
+      <div class="stat"><div class="n">${total}</div><div class="l">전체 품목</div></div>
+      <div class="stat"><div class="n">${totalStock}</div><div class="l">총 재고 수량</div></div>
+      <div class="stat alert"><div class="n">${low}</div><div class="l">발주 필요</div></div>
+      <div class="stat"><div class="n">${todayOut}</div><div class="l">오늘 반출 건</div></div>
+    </div>
+    <div style="margin-top:18px">${alert}</div>
+    <div class="section-title">창고 도식화</div>
+    <div class="grid zones">${zones}</div>`;
+}
+function sameDay(t){const d=new Date(t),n=new Date();return d.toDateString()===n.toDateString()}
+
+/* ---- 반출 (게스트/관리자 공통) ---- */
+function viewOutbound(){
+  return `
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:17px">📤 물품 반출</h3>
+      <p class="tsmall" style="margin:0 0 14px">QR을 찍거나, 아래에서 품목을 <b>검색</b>해 선택하세요. 수량·반출자를 입력하면 기록됩니다.</p>
+      <button class="btn btn-primary btn-block" onclick="openScan()" style="margin-bottom:14px">📷 QR 스캔으로 반출</button>
+      <input type="text" id="ob-search" placeholder="🔍 품목 검색 (예: 커피, 휴지, 건전지)" oninput="renderOutboundList()" style="margin-bottom:12px">
+      <div id="ob-list" class="row-list" style="max-height:60vh;overflow:auto"></div>
+    </div>`;
+}
+function renderOutboundList(){
+  const box=document.getElementById("ob-list"); if(!box)return;
+  const q=(document.getElementById("ob-search")?document.getElementById("ob-search").value:"").trim().toLowerCase();
+  let html="";
+  S.warehouses.forEach(w=>{
+    const its=S.items.filter(x=>x.wh===w.id && (!q || (x.name+" "+x.cat).toLowerCase().includes(q)));
+    if(!its.length)return;
+    html+=`<div class="cat-label" style="color:${w.color};font-weight:800">${esc(w.name)} · ${esc(w.sub)}</div>`;
+    its.forEach(x=>{const st=statusOf(x);const col=st==="low"?"var(--low)":st==="warn"?"var(--warn)":"var(--ok)";
+      html+=`<div class="item-row" style="cursor:pointer" onclick="openOutboundForm('${x.id}')">
+        <span class="dot d-${st}"></span>
+        <div class="item-main"><div class="item-nm">${esc(x.name)}</div><div class="item-meta">${esc(x.cat)}</div></div>
+        <div class="stock-badge"><div class="sn" style="color:${col}">${x.stock}</div><div class="su">${esc(x.unit)}</div></div>
+      </div>`;});
+  });
+  box.innerHTML = html || `<div class="empty">검색 결과가 없습니다.</div>`;
+}
+function itemOptions(sel){
+  return S.warehouses.map(w=>{
+    const its=S.items.filter(x=>x.wh===w.id);
+    if(!its.length) return "";
+    return `<optgroup label="${esc(w.name)} · ${esc(w.sub)}">`+
+      its.map(x=>`<option value="${x.id}" ${sel===x.id?"selected":""}>${esc(x.name)} (재고 ${x.stock}${x.unit})</option>`).join("")+
+      `</optgroup>`;
+  }).join("");
+}
+async function doOutbound(itemId,qty){
+  const x=itemById(itemId); if(!x)return toast("품목을 찾을 수 없습니다","bad");
+  qty=Math.floor(qty); if(!qty||qty<1)return toast("반출 수량을 확인하세요","warn");
+  if(qty>x.stock)return toast(`재고 부족 (현재 ${x.stock}${x.unit})`,"warn");
+  const name=resolveActor(); if(name===null)return;
+  const wasAbove = x.stock > x.rp;   // 반출 전 적정재고 초과 여부
+  const {error}=await sb.rpc("withdraw",{p_item:itemId,p_qty:qty,p_actor:name});
+  if(error){toast("반출 실패: "+(error.message||"재고 확인"),"bad");return}
+  toast(`${x.name} ${qty}${x.unit} 반출 완료 (${name})`,"ok");
+  closeModal(); await reload();
+  const nx=itemById(itemId);
+  if(nx && nx.stock<=nx.rp){
+    setTimeout(()=>toast(`⚠ ${nx.name} 적정재고 이하 — 발주 필요`,"warn"),400);
+    if(wasAbove){ sendReorderMail(false).catch(()=>{}); }  // 적정재고 이하로 '내려간 순간' 1회 자동 발송
+  }
+}
+function resolveActor(){
+  const sel=document.getElementById("sc-name");
+  if(!sel){ return isAdmin()?"관리자":"(현장)"; }
+  let name = sel.value==="__custom__" ? (document.getElementById("sc-name-custom").value||"").trim() : sel.value;
+  if(!name){ toast("반출자를 선택하거나 입력하세요","warn"); return null; }
+  return name;
+}
+
+/* ---- 입고 (관리자) ---- */
+function viewInbound(){
+  return `
+    <div class="card">
+      <h3 style="margin:0 0 4px;font-size:17px">📥 물품 입고</h3>
+      <p class="tsmall" style="margin:0 0 16px">입고된 물품의 수량을 입력하면 재고에 더해집니다.</p>
+      <div class="selrow">
+        <div>
+          <label class="fld">품목 선택</label>
+          <select id="ib-item">${itemOptions()}</select>
+        </div>
+        <div style="flex:0 0 110px;min-width:100px">
+          <label class="fld">입고 수량</label>
+          <input type="number" id="ib-qty" min="1" value="1">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" onclick="doInbound()">입고 기록</button>
+      </div>
+    </div>`;
+}
+async function doInbound(){
+  const x=itemById(v("ib-item")); if(!x)return;
+  let qty=Math.floor(+v("ib-qty")); if(!qty||qty<1)return toast("입고 수량을 확인하세요","warn");
+  const {error}=await sb.rpc("restock",{p_item:x.id,p_qty:qty,p_actor:"관리자"});
+  if(error){toast("입고 실패: "+(error.message||""),"bad");return}
+  toast(`${x.name} ${qty}${x.unit} 입고 완료`,"ok");
+  await reload();
+}
+
+/* ---- 이력 ---- */
+function viewHistory(){
+  if(!S.txns.length) return `<div class="card"><div class="empty">아직 입출고 이력이 없습니다.</div></div>`;
+  const rows=S.txns.slice(0,300).map(t=>{
+    const x=itemById(t.item); const nm=(x?x.name:(t.itemName||"(삭제된 품목)")); const w=whOf(t.wh)||(x?whOf(x.wh):null);
+    return `<div class="lrow">
+      <span class="pill ${t.type==="in"?"txn-in":"txn-out"}">${t.type==="in"?"입고":"반출"}</span>
+      <div class="grow"><div style="font-weight:700">${esc(nm)}</div>
+        <div class="tsmall">${w?esc(w.name)+" · ":""}${esc(t.byName||"-")} · ${fmtTime(t.at)}</div></div>
+      <div style="font-weight:900;font-size:15px;color:${t.type==="in"?"var(--ok)":"var(--warn)"}">
+        ${t.type==="in"?"+":"−"}${t.qty}</div>
+    </div>`;
+  }).join("");
+  return `<div class="card"><div style="display:flex;align-items:center;margin-bottom:6px">
+      <h3 style="margin:0;font-size:17px">🕑 입출고 이력</h3>
+      <button class="btn btn-ghost btn-sm no-print" style="margin-left:auto" onclick="exportCSV()">CSV 내보내기</button>
+    </div><div class="row-list">${rows}</div></div>`;
+}
+
+/* ---- 품목관리 (관리자) ---- */
+function viewItems(){
+  return `<div class="card"><div style="display:flex;align-items:center;margin-bottom:10px">
+      <h3 style="margin:0;font-size:17px">📦 품목 관리</h3>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="editItem()">+ 품목 추가</button>
+    </div>
+    <p class="tsmall" style="margin:0 0 10px">품목의 <b>적정재고</b>는 각 품목의 <b>수정</b>에서 원하는 값으로 바꿀 수 있습니다.</p>
+    <input type="text" id="it-search" placeholder="🔍 품목·분류·창고 검색" oninput="renderItemsList()" style="margin-bottom:12px">
+    <div id="it-list" class="row-list"></div></div>`;
+}
+function renderItemsList(){
+  const box=document.getElementById("it-list"); if(!box)return;
+  const q=(document.getElementById("it-search")?document.getElementById("it-search").value:"").trim().toLowerCase();
+  const rows=S.items.filter(x=>{const w=whOf(x.wh);
+      return !q || (x.name+" "+x.cat+" "+(w?w.name:"")).toLowerCase().includes(q);})
+    .map(x=>{const w=whOf(x.wh);
+    return `<div class="lrow">
+      <span class="dot d-${statusOf(x)}"></span>
+      <div class="grow"><div style="font-weight:700">${esc(x.name)}</div>
+        <div class="tsmall">${esc(w.name)} · ${esc(x.cat)} · 재고 ${x.stock}${x.unit} / 적정 ${x.rp}${x.unit}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="editItem('${x.id}')">수정</button>
+      <button class="btn btn-danger btn-sm" onclick="delItem('${x.id}')">삭제</button>
+    </div>`;}).join("");
+  box.innerHTML = rows || `<div class="empty">검색 결과가 없습니다.</div>`;
+}
+function editItem(id){
+  const x=id?itemById(id):{name:"",wh:S.warehouses[0].id,cat:"",unit:"개",stock:0,rp:0};
+  const whOpts=S.warehouses.map(w=>`<option value="${w.id}" ${x.wh===w.id?"selected":""}>${esc(w.name)} (${esc(w.sub)})</option>`).join("");
+  openModal(`
+    <h3>${id?"품목 수정":"품목 추가"}</h3>
+    <label class="fld">품목명</label><input type="text" id="f-name" value="${esc(x.name)}">
+    <label class="fld">창고</label><select id="f-wh">${whOpts}</select>
+    <label class="fld">분류 (예: 사무용품, 의료용품, 생활용품, 음료)</label><input type="text" id="f-cat" value="${esc(x.cat)}">
+    <div class="selrow" style="margin-top:0">
+      <div><label class="fld">단위</label><input type="text" id="f-unit" value="${esc(x.unit)}"></div>
+      <div><label class="fld">현재 재고</label><input type="number" id="f-stock" min="0" value="${x.stock}"></div>
+      <div><label class="fld">적정재고</label><input type="number" id="f-rp" min="0" value="${x.rp}"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">취소</button>
+      <button class="btn btn-primary" onclick="saveItem('${id||""}')">저장</button>
+    </div>`);
+}
+async function saveItem(id){
+  const name=v("f-name").trim(); if(!name)return toast("품목명을 입력하세요","warn");
+  const row={name,warehouse_id:v("f-wh"),category:v("f-cat").trim()||"기타",unit:v("f-unit").trim()||"개",
+    stock:Math.max(0,Math.floor(+v("f-stock")||0)),reorder_point:Math.max(0,Math.floor(+v("f-rp")||0))};
+  const {error}= id ? await sb.from("items").update(row).eq("id",id)
+                     : await sb.from("items").insert(row);
+  if(error){toast("저장 실패: "+(error.message||""),"bad");return}
+  closeModal(); toast("저장되었습니다","ok"); await reload();
+}
+async function delItem(id){const x=itemById(id);if(!confirm(`'${x.name}' 품목을 삭제할까요?`))return;
+  const {error}=await sb.from("items").delete().eq("id",id);
+  if(error){toast("삭제 실패: "+(error.message||""),"bad");return}
+  toast("삭제되었습니다","ok"); await reload();}
+
+/* ---- QR 발행 (관리자 전용) ---- */
+function appBase(){ return (S.appUrl && S.appUrl.trim()) ? S.appUrl.trim() : (location.origin+location.pathname); }
+function whUrl(id){ const b=appBase(); return b + (b.indexOf('?')>=0?'&':'?') + "wh=" + id; }
+function saveAppUrl(){ S.appUrl=(document.getElementById("qr-url").value||"").trim(); try{localStorage.setItem("sypcon_appurl",S.appUrl)}catch(e){} toast("앱 주소를 저장했습니다","ok"); render(); }
+function viewQR(){
+  const base=appBase();
+  const cells=S.warehouses.map(w=>{
+    const n=S.items.filter(x=>x.wh===w.id).length;
+    return `<div class="qr-cell" style="border-top:4px solid ${w.color}"><div class="qbox" id="qr-${w.id}"></div>
+      <div class="qnm">${esc(w.name)}</div><div class="qsub">${esc(w.sub)} · ${n}품목</div></div>`}).join("");
+  return `<div class="card"><div style="display:flex;align-items:center;margin-bottom:12px" class="no-print">
+      <h3 style="margin:0;font-size:17px">🏷 창고 QR 발행</h3>
+      <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="window.print()">🖨 인쇄</button>
+    </div>
+    <div class="no-print" style="background:var(--line-soft);border-radius:12px;padding:12px 14px;margin-bottom:14px">
+      <label class="fld" style="margin-top:0">앱 주소 (배포 URL)</label>
+      <div class="selrow">
+        <div><input type="text" id="qr-url" value="${esc(base)}" placeholder="https://앱주소"></div>
+        <button class="btn btn-ghost btn-sm" onclick="saveAppUrl()">주소 저장</button>
+      </div>
+      <p class="tsmall" style="margin:8px 0 0">이 주소로 QR을 만듭니다. 폰 <b>기본 카메라</b>로 QR을 찍으면 이 주소가 열리며 해당 창고 품목 목록이 바로 뜹니다.<br>실제 배포(예: Netlify) 후 그 주소를 넣고 <b>주소 저장 → 인쇄</b>하세요.</p>
+    </div>
+    <p class="tsmall no-print" style="margin:0 0 14px">창고별 QR을 인쇄해 <b>창고 입구</b>에 부착하세요.</p>
+    <div class="qr-grid" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">${cells}</div></div>`;
+}
+function renderQRCodes(){
+  S.warehouses.forEach(w=>{const box=document.getElementById("qr-"+w.id);if(!box)return;box.innerHTML="";
+    try{new QRCode(box,{text:whUrl(w.id),width:150,height:150,correctLevel:QRCode.CorrectLevel.M})}catch(e){box.textContent="QR오류"}});
+}
+
+/* ---- 계정·명단 (관리자) ---- */
+function viewUsers(){
+  const staffRows = S.staff.length
+    ? S.staff.map((n,i)=>`<div class="lrow"><span class="dot d-ok"></span>
+        <div class="grow" style="font-weight:700">${esc(n)}</div>
+        <button class="btn btn-danger btn-sm" onclick="delStaff(${i})">삭제</button></div>`).join("")
+    : `<div class="empty">등록된 반출자가 없습니다.</div>`;
+  return `<div class="card">
+      <h3 style="margin:0 0 6px;font-size:17px">🔑 관리자 계정</h3>
+      <p class="tsmall" style="margin:0 0 10px">관리자 계정(로그인용)은 <b>Supabase 대시보드 → Authentication → Users → Add user</b>에서 이메일·비밀번호로 추가합니다. 여기서 만든 계정으로 로그인하면 입고·품목·QR·발주를 관리할 수 있습니다.</p>
+      <div class="lrow"><span class="dot d-ok"></span><div class="grow"><div style="font-weight:700">현재 로그인</div>
+        <div class="tsmall">관리자로 접속 중</div></div></div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;margin-bottom:6px">
+        <h3 style="margin:0;font-size:17px">🙋 반출자 명단</h3>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="addStaff()">+ 이름 추가</button>
+      </div>
+      <p class="tsmall" style="margin:2px 0 8px">로그인 없이 QR로 반출할 때, 현장 직원이 여기 등록된 이름 중에서 반출자를 고릅니다.</p>
+      <div class="row-list">${staffRows}</div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin:0 0 6px;font-size:17px">📧 발주 알림 메일</h3>
+      <p class="tsmall" style="margin:0 0 10px">적정재고 이하로 떨어지면 아래 주소로 발주 알림 메일이 자동 발송됩니다. 여러 명은 콤마(,)로 구분하세요. (Edge Function <b>notify-reorder</b> 배포 필요)</p>
+      <label class="fld" style="margin-top:0">수신자 이메일</label>
+      <div class="selrow">
+        <div><input type="text" id="ae-input" value="${esc(S.alertEmails||"")}" placeholder="manager@company.com, buyer@company.com"></div>
+        <button class="btn btn-ghost btn-sm" onclick="saveAlertEmails()">저장</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary btn-sm" onclick="sendReorderMail(true)">테스트 메일 보내기</button>
+        <button class="btn btn-ghost btn-sm" onclick="sendReorderMail(false)">지금 발주 메일 보내기</button>
+      </div>
+    </div>`;
+}
+function addStaff(){openModal(`<h3>반출자 추가</h3>
+  <label class="fld">이름</label><input type="text" id="st-name" placeholder="예: 홍길동">
+  <div class="form-actions"><button class="btn btn-ghost" onclick="closeModal()">취소</button>
+    <button class="btn btn-primary" onclick="saveStaff()">추가</button></div>`);
+  setTimeout(()=>{const e=document.getElementById("st-name");if(e)e.focus()},50);}
+async function saveStaff(){const n=v("st-name").trim();if(!n)return toast("이름을 입력하세요","warn");
+  if(S.staff.includes(n))return toast("이미 있는 이름입니다","warn");
+  const {error}=await sb.from("staff").insert({name:n});
+  if(error){toast("추가 실패: "+(error.message||""),"bad");return}
+  closeModal();toast("추가되었습니다","ok");await reload();}
+async function delStaff(i){const n=S.staff[i];if(!confirm(`'${n}'을(를) 명단에서 삭제할까요?`))return;
+  const {error}=await sb.from("staff").delete().eq("name",n);
+  if(error){toast("삭제 실패: "+(error.message||""),"bad");return}
+  toast("삭제되었습니다","ok");await reload();}
+
+/* =========================================================
+   QR 스캔
+   ========================================================= */
+function openScan(){
+  openModal(`<h3>📷 QR 스캔 반출</h3><p class="sub">물품/선반의 QR을 비추면 반출 화면이 열립니다.</p>
+    <div id="reader"></div>
+    <p class="tsmall" id="scan-msg">카메라를 준비 중입니다…</p>
+    <div class="form-actions"><button class="btn btn-ghost btn-block" onclick="closeModal()">닫기</button></div>`);
+  setTimeout(startScan,150);
+}
+function startScan(){
+  if(typeof Html5Qrcode==="undefined"){const m=document.getElementById("scan-msg");if(m)m.textContent="스캐너를 불러오지 못했습니다. 목록에서 직접 선택해 주세요.";return}
+  try{qrScanner=new Html5Qrcode("reader");}catch(e){return}
+  qrScanner.start({facingMode:"environment"},{fps:10,qrbox:{width:220,height:220}},
+    txt=>onScan(txt),()=>{}
+  ).then(()=>{const m=document.getElementById("scan-msg");if(m)m.textContent="QR을 사각형 안에 맞춰 주세요."})
+   .catch(err=>{const m=document.getElementById("scan-msg");if(m)m.textContent="카메라를 사용할 수 없습니다. 목록에서 직접 선택해 주세요.";});
+}
+function stopScan(){if(qrScanner){try{qrScanner.stop().then(()=>{try{qrScanner.clear()}catch(e){}}).catch(()=>{})}catch(e){} qrScanner=null}}
+function onScan(txt){
+  stopScan();
+  if(txt.startsWith("SYCW:")){const w=whOf(txt.slice(5)); if(w)return openWarehousePick(w.id);}
+  if(txt.startsWith("SYC:")){const x=itemById(txt.slice(4)); if(x)return openOutboundForm(x.id);} // 구버전 품목 QR 호환
+  const m=txt.match(/[?&#]wh=([A-Za-z0-9_]+)/); if(m){const w=whOf(m[1]); if(w)return openWarehousePick(w.id);}
+  const w2=whOf(txt); if(w2)return openWarehousePick(w2.id);
+  const x2=itemById(txt); if(x2)return openOutboundForm(x2.id);
+  openModal(`<h3>인식된 QR 없음</h3><p class="sub">등록된 창고/품목 QR이 아닙니다: ${esc(txt)}</p>
+    <div class="form-actions"><button class="btn btn-ghost btn-block" onclick="openScan()">다시 스캔</button></div>`);
+}
+/* 창고 QR → 품목 선택 목록 */
+function openWarehousePick(whId){
+  const w=whOf(whId); const items=S.items.filter(x=>x.wh===whId);
+  let list;
+  if(!items.length){list=`<div class="empty">이 창고에 등록된 품목이 없습니다.</div>`;}
+  else{
+    const cats=[...new Set(items.map(x=>x.cat))];
+    list=cats.map(c=>`<div class="cat-label">${esc(c)}</div>`+
+      items.filter(x=>x.cat===c).map(x=>{const st=statusOf(x);const col=st==="low"?"var(--low)":st==="warn"?"var(--warn)":"var(--ok)";
+        return `<div class="item-row" style="cursor:pointer" onclick="openOutboundForm('${x.id}','${whId}')">
+          <span class="dot d-${st}"></span>
+          <div class="item-main"><div class="item-nm">${esc(x.name)}</div><div class="item-meta">적정 ${x.rp}${esc(x.unit)}</div></div>
+          <div class="stock-badge"><div class="sn" style="color:${col}">${x.stock}</div><div class="su">${esc(x.unit)}</div></div>
+        </div>`}).join("")).join("");
+  }
+  openModal(`<h3>${esc(w.name)} <span class="tsmall" style="font-weight:500">${esc(w.sub)}</span></h3>
+    <p class="sub">사용한 품목을 선택하세요.</p>
+    <div style="max-height:52vh;overflow:auto;margin:0 -6px">${list}</div>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="openScan()">📷 다시 스캔</button>
+      <button class="btn btn-ghost grow" onclick="closeModal()">닫기</button>
+    </div>`);
+}
+function openOutboundForm(id,whId){
+  const x=itemById(id); const w=whOf(x.wh);
+  const backBtn = whId
+    ? `<button class="btn btn-ghost" onclick="openWarehousePick('${whId}')">← 목록</button>`
+    : `<button class="btn btn-ghost" onclick="closeModal()">취소</button>`;
+  openModal(`<h3>${esc(x.name)}</h3><p class="sub">${esc(w.name)} · 현재 재고 <b>${x.stock}${esc(x.unit)}</b></p>
+    <label class="fld">반출 수량</label>
+    <input type="number" id="sc-qty" min="1" max="${x.stock}" value="1" style="font-size:20px;text-align:center">
+    <label class="fld">반출자</label>
+    ${actorField()}
+    <div class="form-actions">
+      ${backBtn}
+      <button class="btn btn-primary grow" onclick="doOutbound('${x.id}',+document.getElementById('sc-qty').value)">반출 기록</button>
+    </div>`);
+  setTimeout(()=>{const q=document.getElementById("sc-qty");if(q){q.focus();q.select()}},60);
+}
+function actorField(){
+  const meU=me();
+  const selfName=(meU&&meU.role!=="guest")?meU.name:"";
+  const names=[...S.staff];
+  if(selfName && !names.includes(selfName)) names.unshift(selfName);
+  const opts=names.map(n=>`<option value="${esc(n)}" ${n===selfName?"selected":""}>${esc(n)}</option>`).join("");
+  const hasSel=names.length>0;
+  return `<select id="sc-name" onchange="var c=document.getElementById('sc-name-custom');c.style.display=this.value==='__custom__'?'block':'none';if(this.value==='__custom__')c.focus()">
+      ${opts}
+      <option value="__custom__" ${hasSel?"":"selected"}>+ 직접 입력</option>
+    </select>
+    <input type="text" id="sc-name-custom" placeholder="이름 입력" style="margin-top:8px;display:${hasSel?"none":"block"}">`;
+}
+
+/* =========================================================
+   발주서 / CSV
+   ========================================================= */
+function makeOrder(){
+  const low=lowItems();
+  const lines=low.map(x=>{const w=whOf(x.wh);const need=Math.max(1,x.rp*2-x.stock);
+    return `- [${w.name}] ${x.name} : 현재 ${x.stock}${x.unit} / 적정 ${x.rp}${x.unit} → 발주권장 ${need}${x.unit}`}).join("\n");
+  const text=`■ 소모품 발주 요청 (${fmtTime(Date.now())})\n작성: ${me().name}\n\n${lines}`;
+  openModal(`<h3>📋 발주서</h3><p class="sub">적정재고 이하 ${low.length}개 품목입니다. 복사해서 메일·메신저로 발주하세요.</p>
+    <textarea id="order-text" style="width:100%;min-height:190px;padding:12px;border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--ink);font-family:inherit;font-size:13px">${esc(text)}</textarea>
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">닫기</button>
+      <button class="btn btn-ghost" onclick="copyOrder()">복사하기</button>
+      <button class="btn btn-primary grow" onclick="sendReorderMail(false)">📧 관리자에게 메일 발송</button>
+    </div>`);
+}
+function copyOrder(){const t=document.getElementById("order-text");t.select();
+  try{navigator.clipboard.writeText(t.value)}catch(e){try{document.execCommand("copy")}catch(e2){}}toast("발주서를 복사했습니다","ok")}
+
+function exportCSV(){
+  const head="구분,품목,창고,수량,담당자,일시\n";
+  const body=S.txns.map(t=>{const x=itemById(t.item);const w=x?whOf(x.wh).name:"";
+    return `${t.type==="in"?"입고":"반출"},${(x?x.name:"삭제됨").replace(/,/g,"")},${w},${t.qty},${(t.byName||t.by)},${fmtTime(t.at)}`}).join("\n");
+  const blob=new Blob(["\uFEFF"+head+body],{type:"text/csv"});const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);a.download="소모품_입출고이력.csv";a.click();toast("CSV를 내보냈습니다","ok");
+}
+
+/* =========================================================
+   유틸 · 모달 · 토스트
+   ========================================================= */
+function v(id){return document.getElementById(id).value}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function openModal(html){document.getElementById("overlay-root").innerHTML=
+  `<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${html}</div></div>`}
+function closeModal(){stopScan();document.getElementById("overlay-root").innerHTML=""}
+let toastT;function toast(msg,kind){const t=document.getElementById("toast");t.textContent=msg;
+  t.className="show "+(kind||"");clearTimeout(toastT);toastT=setTimeout(()=>t.className="",2200)}
+
+/* 시작 */
+loadAppUrl();
+(async function boot(){
+  const p=new URLSearchParams(location.search);
+  let wh=p.get("wh"); if(!wh){const hm=location.hash.match(/wh=([A-Za-z0-9_]+)/); if(hm)wh=hm[1];}
+  if(!initSB()){
+    // Supabase 미설정 — 안내만
+    document.getElementById("lg-err").textContent="⚙ 상단 <script>의 SUPABASE_URL / SUPABASE_ANON 값을 입력하세요.";
+    return;
+  }
+  const {data:{session}}=await sb.auth.getSession();
+  if(wh){
+    // QR로 진입 — 로그인 세션 있으면 관리자, 없으면 게스트로 해당 창고 목록
+    if(session){AUTHED=true;} else {GUEST=true;}
+    await refresh(); enterApp();
+    if(whOf(wh)) setTimeout(()=>openWarehousePick(wh),300);
+    else toast("QR의 창고를 찾을 수 없습니다","warn");
+  } else if(session){
+    AUTHED=true; await refresh(); enterApp();
+  }
+})();
+document.getElementById("lg-pw").addEventListener("keydown",e=>{if(e.key==="Enter")doLogin()});
+document.getElementById("lg-id").addEventListener("keydown",e=>{if(e.key==="Enter")document.getElementById("lg-pw").focus()});
+</script>
+</body>
+</html>
